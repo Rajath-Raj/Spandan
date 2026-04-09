@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import type { IUser } from "@/lib/store/auth-store";
 import { toast } from "sonner";
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 const apiCall = async (endpoint: string, options: RequestInit = {}) => {
   const token = localStorage.getItem('firebase-auth-token');

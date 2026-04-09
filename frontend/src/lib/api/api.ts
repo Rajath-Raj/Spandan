@@ -1,6 +1,7 @@
 import axios from "axios";
+import { getAuth } from "firebase/auth";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 const api = axios.create({
     baseURL: API_URL,
@@ -9,9 +10,7 @@ const api = axios.create({
     },
 });
 
-//Use if backend require AUTHORIZATION for endpoints
-/*
-import { getAuth } from "firebase/auth";
+// Attach Firebase auth token to every request
 api.interceptors.request.use(
     async (config) => {
         const user = getAuth().currentUser;
@@ -23,6 +22,5 @@ api.interceptors.request.use(
     },
     (error) => Promise.reject(error)
 );
-*/
 
 export default api;
