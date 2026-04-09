@@ -36,10 +36,6 @@ export default function RoleSelectionPage() {
     const handleConfirm = async () => {
         if (!selectedRole || !user) return;
 
-        console.log("[RoleSelect] user:", user);
-        console.log("[RoleSelect] selectedRole:", selectedRole);
-        console.log("[RoleSelect] VITE_API_URL:", import.meta.env.VITE_API_URL);
-
         try {
             setLoading(true);
             setError("");
@@ -50,9 +46,9 @@ export default function RoleSelectionPage() {
             });
 
             navigate({ to: `/${selectedRole}/home` });
-        } catch (error: any) {
-            console.error("[RoleSelect] Failed to update user role:", error);
-            setError(`Error: ${error?.message || String(error)}`);
+        } catch (error) {
+            console.error("Failed to update user role:", error);
+            setError("Failed to set your role. Please try again.");
         } finally {
             setLoading(false);
         }

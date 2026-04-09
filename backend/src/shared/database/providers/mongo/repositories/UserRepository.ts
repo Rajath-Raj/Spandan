@@ -48,14 +48,22 @@ export class UserRepository implements IUserRepository {
     if (!role || typeof role !== 'string') {
       throw new Error('Role must be a non-empty string');
     }
+    // Use upsert so that if the user document doesn't exist in MongoDB yet
+    // (e.g. a race condition or failed creation during signup), we create it.
+    // $setOnInsert only applies when inserting a new document.
     const updatedUser = await UserModel.findOneAndUpdate(
       { firebaseUID },
-      { $set: { role } },  // overwrite the role
-      { new: true }
+      {
+        $set: { role },
+        $setOnInsert: {
+          firebaseUID,
+          email: `${firebaseUID}@placeholder.local`,
+          firstName: '',
+          lastName: '',
+        }
+      },
+      { new: true, upsert: true }
     ).lean<IUser>().exec();
-    if (!updatedUser) {
-      throw new NotFoundError('User not found');
-    }
     return updatedUser;
   }
 

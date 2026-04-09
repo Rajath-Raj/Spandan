@@ -13,9 +13,8 @@ import {
 } from "firebase/auth";
 import { IUser, useAuthStore } from "./store/auth-store";
 import { mapFirebaseUserToAppUser } from "./api/auth";
-// import { log } from "console";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -39,6 +38,39 @@ export const updateUserRole = async (firebaseUID: string, role: string) => {
       throw new Error("No authenticated user found");
     }
     const token = await user.getIdToken();
+
+    // Step 1: Ensure the user document exists in MongoDB (find-or-create).
+    // This handles cases where the user exists in Firebase but not in MongoDB
+    // (e.g. if backend user creation failed silently during signup/login).
+    await fetch(`${API_URL}/users/firebase/${firebaseUID}/profile`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        firebaseUID,
+        firstName: user.displayName?.split(' ')[0] || '',
+        lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
+        email: user.email || '',
+        avatar: user.photoURL || null,
+        role: '',
+        phoneNumber: null,
+        bio: null,
+        institution: null,
+        designation: null,
+        address: null,
+        emergencyContact: null,
+        dateOfBirth: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    });
+    // We intentionally don't throw on profile response — the backend treats
+    // POST /profile as find-or-create, so it works whether the user already
+    // exists or not.
+
+    // Step 2: Now update the role
     const response = await fetch(`${API_URL}/users/firebase/${firebaseUID}/role`, {
       method: 'PATCH',
       headers: {
@@ -68,7 +100,6 @@ export const loginWithGoogle = async () => {
   const idToken = await result.user.getIdToken();
 
   const backendUser = await createBackendUser(firebaseUser);
-  // const backendUser = await mapFirebaseUserToAppUser(firebaseUser);
 
   const setAuthState = useAuthStore.getState();
   setAuthState.setToken(idToken);
