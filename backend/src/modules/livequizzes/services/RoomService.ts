@@ -12,15 +12,21 @@ import { pollSocket } from '../utils/PollSocket.js';
 export class RoomService {
   private userModel = UserModel;
   private roomModel = Room;
-  async createRoom(name: string, teacherId: string): Promise<RoomType> {
+  async createRoom(name: string, teacherId: string, teacherName?: string): Promise<RoomType> {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    const teachername = await this.userModel.findOne({ firebaseUID: teacherId }).lean();
+    // Use provided teacherName if available; otherwise look up from DB
+    let resolvedTeacherName = teacherName?.trim() || '';
+    if (!resolvedTeacherName) {
+      const teacherDoc = await this.userModel.findOne({ firebaseUID: teacherId }).lean();
+      resolvedTeacherName = `${teacherDoc?.firstName || ''} ${teacherDoc?.lastName || ''}`.trim() || 'Teacher';
+    }
+
     const newRoom = await new Room({
       roomCode: code,
       name,
       teacherId,
-      teacherName: `${teachername?.firstName} ${teachername?.lastName}`.trim(),
+      teacherName: resolvedTeacherName,
       createdAt: new Date(),
       status: 'active',
       polls: []

@@ -62,8 +62,8 @@ export class PollRoomController {
 
   //@Authorized(['teacher'])
   @Post('/')
-  async createRoom(@Body() body: { name: string; teacherId: string }) {
-    const room = await this.roomService.createRoom(body.name, body.teacherId);
+  async createRoom(@Body() body: { name: string; teacherId: string; teacherName?: string }) {
+    const room = await this.roomService.createRoom(body.name, body.teacherId, body.teacherName);
     return {
       ...room,
       inviteLink: `${appOrigins}/student/pollroom/${room.roomCode}`,

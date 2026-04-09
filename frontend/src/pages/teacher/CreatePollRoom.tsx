@@ -39,17 +39,20 @@ export default function CreatePollRoom() {
       return;
     }
 
+    const teacherName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.name || "Teacher";
+
     setIsCreating(true);
     try {
       const res = await api.post("/livequizzes/rooms/", {
         name: roomName,
-        teacherId: user.uid
+        teacherId: user.uid,
+        teacherName,
       });
       toast.success("Assessment space created successfully!");
       navigate({ to: `/teacher/pollroom/${res.data.roomCode}` });
-    } catch (error) {
-      console.error("Error creating assessment:", error);
-      toast.error("Failed to create assessment space. Please try again.");
+    } catch (error: any) {
+      console.error("Error creating assessment:", error?.response?.data || error?.message || error);
+      toast.error(`Failed to create assessment space: ${error?.response?.data?.message || error?.message || "Please try again."}`);
     } finally {
       setIsCreating(false);
     }
