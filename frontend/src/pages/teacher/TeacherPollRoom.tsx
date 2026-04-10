@@ -400,6 +400,13 @@ export default function TeacherPollRoom() {
   const [selectedModel, setSelectedModel] = useState("deepseek-r1:70b");
   const [questionCount, setQuestionCount] = useState<number>(3);
 
+  // RAG State
+  const [showRagPanel, setShowRagPanel] = useState(false);
+  const [ragDocuments, setRagDocuments] = useState<any[]>([]);
+  const [ragTopic, setRagTopic] = useState("");
+  const [isRagUploading, setIsRagUploading] = useState(false);
+  const [isRagGenerating, setIsRagGenerating] = useState(false);
+
   // Queue for auto-generated questions while live recording is ongoing.
   // These are hidden from the UI until the teacher stops the mic.
   const [queuedGeneratedQuestions, setQueuedGeneratedQuestions] = useState<GeneratedQuestion[]>([]);
@@ -504,6 +511,89 @@ export default function TeacherPollRoom() {
     updatedQuestions[currentQuestionIndex].correctOptionIndex = optionIndex;
     setGeneratedQuestions(updatedQuestions);
   };
+
+  // --- RAG Handlers ---
+  const fetchRagDocuments = useCallback(async () => {
+    if (!roomCode) return;
+    try {
+      const res = await api.get(`/livequizzes/rooms/${roomCode}/documents`);
+      setRagDocuments(res.data.documents || []);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [roomCode]);
+
+  useEffect(() => {
+    if (showRagPanel) {
+      fetchRagDocuments();
+    }
+  }, [showRagPanel, fetchRagDocuments]);
+
+  const handleRagUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File too large. Max 10MB.');
+      return;
+    }
+    
+    setIsRagUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      await api.post(`/livequizzes/rooms/${roomCode}/documents`, formData);
+      toast.success('Document uploaded and indexed successfully');
+      fetchRagDocuments();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to upload document');
+    } finally {
+      setIsRagUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRagDelete = async (docId: string) => {
+    try {
+      await api.delete(`/livequizzes/rooms/${roomCode}/documents/${docId}`);
+      toast.success('Document deleted');
+      fetchRagDocuments();
+    } catch (err) {
+      toast.error('Failed to delete document');
+    }
+  };
+
+  const handleRagGenerate = async () => {
+    if (!ragTopic.trim()) {
+      toast.error('Please enter a topic');
+      return;
+    }
+    setIsRagGenerating(true);
+    try {
+      const spec = questionSpec ? JSON.parse(questionSpec) : [{ count: questionCount, SOL: 1 }];
+      const res = await api.post(`/livequizzes/rooms/${roomCode}/rag-questions`, {
+        topic: ragTopic.trim(),
+        globalQuestionSpecification: spec,
+        model: selectedModel
+      });
+      
+      const cleanQuestions = (res.data.questions || []).map((q: any) => ({
+        question: q.questionText,
+        options: Array.isArray(q.options) ? q.options.map((opt: any) => opt.text ?? '') : [],
+        correctOptionIndex: Array.isArray(q.options) ? Math.max(0, q.options.findIndex((opt: any) => opt.correct)) : 0
+      }));
+      
+      const filteredQuestions = cleanQuestions.map(filterQuestionOptions);
+      setGeneratedQuestions(filteredQuestions);
+      setShowPreview(true);
+      setShowRagPanel(false);
+      toast.success(`Generated ${filteredQuestions.length} RAG questions!`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to generate RAG questions');
+    } finally {
+      setIsRagGenerating(false);
+    }
+  };
+  // --------------------
 
 
 
@@ -2340,21 +2430,34 @@ export default function TeacherPollRoom() {
               {/* Desktop Navigation */}
               <div className="hidden md:flex items-center gap-2">
                 <Button
-                  variant={(!showPreview && !showPollModal && !showResultsModal) ? "default" : "outline"}
-                  onClick={handleVoiceRecorderTab}
+                  variant={(!showPreview && !showPollModal && !showResultsModal && !showRagPanel) ? "default" : "outline"}
+                  onClick={() => { handleVoiceRecorderTab(); setShowRagPanel(false); }}
                   className="mr-2"
                 >
                   <Mic className="w-4 h-4 mr-2" />
                   Voice Recorder
                 </Button>
                 <Button
-                  variant={showPreview ? "default" : "outline"}
-                  onClick={handleGeneratedQuestionClick}
+                  variant={showPreview && !showRagPanel ? "default" : "outline"}
+                  onClick={() => { handleGeneratedQuestionClick(); setShowRagPanel(false); }}
                   className="mr-2"
                   disabled={!generatedQuestions.length || roomControlMode === 'poll-disabled'}
                 >
                   <Wand2 className="w-4 h-4 mr-2" />
                   {showPreview ? 'Generated Questions' : 'Generated Questions'}
+                </Button>
+                <Button
+                  variant={showRagPanel ? "default" : "outline"}
+                  onClick={() => {
+                    setShowRagPanel(true);
+                    setShowPreview(false);
+                    setShowPollModal(false);
+                    setShowResultsModal(false);
+                  }}
+                  className="mr-2"
+                >
+                  <ClipboardList className="w-4 h-4 mr-2" />
+                  RAG
                 </Button>
                 {isHost && (
                   <Button
@@ -2501,9 +2604,10 @@ export default function TeacherPollRoom() {
                 </div>
                 <div className="p-4 space-y-2">
                   <Button
-                    variant={(!showPreview && !showPollModal && !showResultsModal) ? "default" : "outline"}
+                    variant={(!showPreview && !showPollModal && !showResultsModal && !showRagPanel) ? "default" : "outline"}
                     onClick={() => {
                       handleVoiceRecorderTab();
+                      setShowRagPanel(false);
                       setIsMobileMenuOpen(false);
                     }}
                     className="w-full justify-start"
@@ -2512,9 +2616,10 @@ export default function TeacherPollRoom() {
                     Voice Recorder
                   </Button>
                   <Button
-                    variant={showPreview ? "default" : "outline"}
+                    variant={showPreview && !showRagPanel ? "default" : "outline"}
                     onClick={() => {
                       handleGeneratedQuestionClick();
+                      setShowRagPanel(false);
                       setIsMobileMenuOpen(false);
                     }}
                     className="w-full justify-start"
@@ -2522,6 +2627,20 @@ export default function TeacherPollRoom() {
                   >
                     <Wand2 className="w-4 h-4 mr-2" />
                     {showPreview ? 'Generated Questions' : 'Generated Questions'}
+                  </Button>
+                  <Button
+                    variant={showRagPanel ? "default" : "outline"}
+                    onClick={() => {
+                      setShowRagPanel(true);
+                      setShowPreview(false);
+                      setShowPollModal(false);
+                      setShowResultsModal(false);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full justify-start"
+                  >
+                    <ClipboardList className="w-4 h-4 mr-2" />
+                    RAG
                   </Button>
                   {
                     isHost && (
@@ -2730,7 +2849,7 @@ export default function TeacherPollRoom() {
                 </CardContent>
               </Card>
             )} */}
-                    {!showPollModal && !showResultsModal && (
+                    {!showPollModal && !showResultsModal && !showRagPanel && (
 
                       <div className="space-y-4 sm:space-y-6">
                         {!showPreview ? (
@@ -4186,6 +4305,60 @@ export default function TeacherPollRoom() {
                             </div>
                           </ScrollArea>
                         )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* RAG Generation Panel */}
+                  {showRagPanel && (
+                    <Card className="m-4 md:m-10 p-4 md:p-10 flex flex-col bg-white/90 dark:bg-gray-900/90 border border-slate-200/80 dark:border-gray-700/80 shadow h-[900px]">
+                      <CardHeader className="flex-shrink-0 pb-3">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+                            <ClipboardList className="w-5 h-5 text-purple-500" />
+                            Document-Based Question Generation (RAG)
+                          </CardTitle>
+                        </div>
+                      </CardHeader>
+                      
+                      <CardContent className="flex-1 overflow-y-auto space-y-6">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Upload Reference Documents (PDF/DOCX)</label>
+                          <div className="flex gap-2">
+                            <Input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleRagUpload} disabled={isRagUploading} />
+                            {isRagUploading && <Button disabled variant="outline"><Loader2 size={16} className="animate-spin mr-2" /> Uploading</Button>}
+                          </div>
+                        </div>
+
+                        {ragDocuments.length > 0 && (
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Uploaded Documents</label>
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                              {ragDocuments.map((doc, idx) => (
+                                <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">
+                                  <span className="text-sm font-medium">{doc.fileName} <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">({doc.chunkCount} chunks)</span></span>
+                                  <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={() => handleRagDelete(doc.documentId)}>
+                                    <Trash2 size={16} />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-2 border-t border-gray-200 dark:border-gray-700 pt-6">
+                          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Target Topic for Generation</label>
+                          <Input placeholder="e.g. History of Python, Photosynthesis" value={ragTopic} onChange={(e) => setRagTopic(e.target.value)} disabled={ragDocuments.length === 0} />
+                          <p className="text-xs text-gray-500 dark:text-gray-400">The AI will strictly search your uploaded documents for this topic to generate facts-based questions.</p>
+                        </div>
+
+                        <Button
+                          onClick={handleRagGenerate}
+                          disabled={!ragTopic.trim() || ragDocuments.length === 0 || isRagGenerating}
+                          className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white"
+                        >
+                          {isRagGenerating ? <><Loader2 size={16} className="animate-spin mr-2"/> Generating from Context...</> : <><Wand2 size={16} className="mr-2"/> Generate RAG Questions</>}
+                        </Button>
                       </CardContent>
                     </Card>
                   )}

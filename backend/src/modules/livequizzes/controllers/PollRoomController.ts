@@ -26,6 +26,7 @@ import { AIContentService } from '#root/modules/genai/services/AIContentService.
 import { VideoService } from '#root/modules/genai/services/VideoService.js';
 import { AudioService } from '#root/modules/genai/services/AudioService.js';
 import { CleanupService } from '#root/modules/genai/services/CleanupService.js';
+import { RAGService } from '#root/modules/genai/services/RAGService.js';
 import type { QuestionSpec } from '#root/modules/genai/services/AIContentService.js';
 // import type { File as MulterFile } from 'multer';
 import { OpenAPI } from 'routing-controllers-openapi';
@@ -56,6 +57,7 @@ export class PollRoomController {
     //@inject(LIVE_QUIZ_TYPES.TranscriptionService) private transcriptionService: TranscriptionService,
     @inject(LIVE_QUIZ_TYPES.AIContentService) private aiContentService: AIContentService,
     @inject(LIVE_QUIZ_TYPES.CleanupService) private cleanupService: CleanupService,
+    @inject(LIVE_QUIZ_TYPES.RAGService) private ragService: RAGService,
     @inject(LIVE_QUIZ_TYPES.RoomService) private roomService: RoomService,
     @inject(LIVE_QUIZ_TYPES.PollService) private pollService: PollService,
   ) { }
@@ -89,7 +91,7 @@ export class PollRoomController {
         return { success: false, message: 'User id is required' };
       }
       const hasAccess = room.teacherId === userId ||
-      room.coHosts?.some(coHost => coHost.userId === userId && coHost.isActive);
+        room.coHosts?.some(coHost => coHost.userId === userId && coHost.isActive);
       if (!hasAccess) {
         return { success: false, message: 'You do not have access to this room' };
       }
@@ -373,4 +375,80 @@ export class PollRoomController {
     return await this.pollService.getUserAchievements(userId);
   }
 
+  // --- RAG Endpoints ---
+
+  @Post('/:code/documents')
+  @HttpCode(200)
+  async uploadDocument(@Param('code') roomCode: string, @Req() req: Request, @Res() res: Response) {
+    await new Promise<void>((resolve, reject) => {
+      upload.single('file')(req, res, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    if (!req.file) {
+      throw new BadRequestError('No file provided');
+    }
+
+    const { path: tempPath, mimetype, originalname } = req.file;
+
+    try {
+      const buffer = await fsp.readFile(tempPath);
+      const result = await this.ragService.indexDocument(roomCode, buffer, mimetype, originalname);
+      
+      return {
+        message: 'Document indexed successfully',
+        document: result
+      };
+    } finally {
+      // Clean up temp file
+      await this.cleanupService.cleanup([tempPath]);
+    }
+  }
+
+  @Get('/:code/documents')
+  async getDocuments(@Param('code') roomCode: string) {
+    const documents = await this.ragService.getRoomDocuments(roomCode);
+    return { documents };
+  }
+
+  @Delete('/:code/documents/:documentId')
+  async deleteDocument(@Param('code') roomCode: string, @Param('documentId') documentId: string) {
+    const success = await this.ragService.deleteDocument(roomCode, documentId);
+    if (!success) {
+      throw new NotFoundError('Document not found');
+    }
+    return { message: 'Document deleted successfully' };
+  }
+
+  @Post('/:code/rag-questions')
+  @HttpCode(200)
+  async generateRAGQuestions(
+    @Param('code') roomCode: string,
+    @Body() body: { topic: string; globalQuestionSpecification: QuestionSpec[]; model?: string }
+  ) {
+    const { topic, globalQuestionSpecification, model } = body;
+
+    if (!topic || topic.trim() === '') {
+      throw new BadRequestError('Topic is required');
+    }
+
+    if (!globalQuestionSpecification || globalQuestionSpecification.length === 0) {
+      throw new BadRequestError('Question specification is required');
+    }
+
+    const questions = await this.ragService.generateQuestionsFromContext(
+      roomCode,
+      topic,
+      globalQuestionSpecification,
+      model
+    );
+
+    return {
+      message: 'RAG questions generated successfully',
+      totalQuestions: questions.length,
+      questions
+    };
+  }
 }

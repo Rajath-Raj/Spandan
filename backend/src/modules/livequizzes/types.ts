@@ -14,6 +14,7 @@ const TYPES = {
   TranscriptionService: Symbol.for('TranscriptionService'),
   AIContentService: Symbol.for('AIContentService'),
   CleanupService: Symbol.for('CleanupService'),
+  RAGService: Symbol.for('RAGService'),
 
   // Socket.IO
   PollSocket: Symbol.for('PollSocket'),
