@@ -143,9 +143,9 @@ export class UserService extends BaseService {
     return updatedUser;
   }
 
-  async findUserByEmail(email:string):Promise<IUser>{
-    console.log(email)
-    const result = await this.userRepo.findByEmail(email)
-    return result
-  }
+ async findUserByEmail(email: string): Promise<IUser> {
+  const result = await this.userRepo.findByEmail(email);
+  if (!result) throw new NotFoundError('User not found');
+  return result;
+}
 }

@@ -1,4 +1,5 @@
-  const NODE_ENV = process.env.NODE_ENV || 'development';
+//index.ts
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
   console.log(`Loading Sentry for ${NODE_ENV} environment`);
   await import('./instrument.js');
