@@ -25,7 +25,7 @@ export class UserService extends BaseService {
         lastName: data.lastName || '',
         email: data.email || '',
         avatar: data.avatar || null,
-        role: data.role || "null",
+        role: data.role || null,
         phoneNumber: data.phoneNumber || null,
         institution: data.institution || null,
         designation: data.designation || null,
@@ -121,9 +121,22 @@ export class UserService extends BaseService {
       throw new Error('Role must be a non-empty string');
     }
 
-    const updatedUser = await this.userRepo.updateRole(firebaseUID, role);
+    let updatedUser = await this.userRepo.updateRole(firebaseUID, role);
 
-
+    if (!updatedUser) {
+      // Fallback: manually create the user if upsert silently returned null
+      const userId = await this.userRepo.create({
+        firebaseUID,
+        email: `${firebaseUID}@placeholder.local`,
+        firstName: '',
+        lastName: '',
+        role: role,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      updatedUser = await this.userRepo.findById(userId);
+    }
+    
     if (!updatedUser) {
       throw new Error('User not found');
     }
