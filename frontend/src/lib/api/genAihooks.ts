@@ -36,11 +36,9 @@ export function useGenerateTranscript(
           "/genai/generate/transcript",
           input,
           {
-            headers: {
-              "Content-Type": isFormData
-                ? "multipart/form-data"
-                : "application/json",
-            },
+            headers: isFormData
+              ? { "Content-Type": undefined }
+              : { "Content-Type": "application/json" },
           }
         );
         return response.data;

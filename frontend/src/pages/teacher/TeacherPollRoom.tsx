@@ -834,9 +834,7 @@ export default function TeacherPollRoom() {
         formData.append('model', selectedModel);
         formData.append('questionCount', questionCount.toString());
 
-        const response = await api.post(`/livequizzes/rooms/${roomCode}/generate-questions`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        const response = await api.post(`/livequizzes/rooms/${roomCode}/generate-questions`, formData);
 
         const rawQuestions = response.data.questions || [];
 
@@ -1525,9 +1523,7 @@ export default function TeacherPollRoom() {
       formData.append('model', selectedModel);
       formData.append('questionCount', questionCount.toString()); // Question count
 
-      const response = await api.post<APIResponse>(`/livequizzes/rooms/${roomCode}/generate-questions`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const response = await api.post<APIResponse>(`/livequizzes/rooms/${roomCode}/generate-questions`, formData);
 
       const rawQuestions = response.data.questions || [];
 
