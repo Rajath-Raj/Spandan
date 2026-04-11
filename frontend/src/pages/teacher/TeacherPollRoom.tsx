@@ -569,7 +569,7 @@ export default function TeacherPollRoom() {
     }
     setIsRagGenerating(true);
     try {
-      const spec = questionSpec ? JSON.parse(questionSpec) : [{ count: questionCount, SOL: 1 }];
+      const spec = questionSpec ? JSON.parse(questionSpec) : [{ SOL: questionCount }];
       const res = await api.post(`/livequizzes/rooms/${roomCode}/rag-questions`, {
         topic: ragTopic.trim(),
         globalQuestionSpecification: spec,

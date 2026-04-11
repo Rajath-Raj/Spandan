@@ -397,7 +397,7 @@ ${transcriptContent}
                 questionType: type
               });
             });
-            allQuestions.push(...questions);
+            // Note: do NOT push raw `questions` again here — they were already normalized above
             console.log(`[generateQuestions] Generated ${questions.length} ${type} questions for segment ${segmentId}`);
             console.log(`[generateQuestions] Raw LLM text for type ${type}, segment ${segmentId}:`, text.slice(0, 500));
           } catch (e: any) {

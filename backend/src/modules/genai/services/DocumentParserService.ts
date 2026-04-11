@@ -9,18 +9,23 @@ export class DocumentParserService {
    * Parse a document buffer (PDF or DOCX) into text.
    */
   public async parseDocument(buffer: Buffer, mimeType: string, originalName: string): Promise<string> {
+    const isPdf = mimeType === 'application/pdf' || originalName.toLowerCase().endsWith('.pdf');
+    const isDocx =
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      originalName.toLowerCase().endsWith('.docx');
+
+    // Guard unsupported types BEFORE the try/catch so the 400 isn't swallowed as 500
+    if (!isPdf && !isDocx) {
+      throw new HttpError(400, `Unsupported file type: ${mimeType || originalName}`);
+    }
+
     try {
-      if (mimeType === 'application/pdf' || originalName.toLowerCase().endsWith('.pdf')) {
+      if (isPdf) {
         const data = await pdfParse(buffer);
         return data.text;
-      } else if (
-        mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-        originalName.toLowerCase().endsWith('.docx')
-      ) {
+      } else {
         const result = await mammoth.extractRawText({ buffer });
         return result.value;
-      } else {
-        throw new HttpError(400, `Unsupported file type: ${mimeType || originalName}`);
       }
     } catch (error: any) {
       console.error(`[DocumentParserService] Error parsing document ${originalName}:`, error);

@@ -14,6 +14,9 @@ import { AudioService } from '#root/modules/genai/services/AudioService.js';
 import { AIContentService } from '#root/modules/genai/services/AIContentService.js';
 import { CleanupService } from '#root/modules/genai/services/CleanupService.js';
 import { RAGService } from '#root/modules/genai/services/RAGService.js';
+import { DocumentParserService } from '#root/modules/genai/services/DocumentParserService.js';
+import { EmbeddingService } from '#root/modules/genai/services/EmbeddingService.js';
+import { GENAI_TYPES } from '#root/modules/genai/types.js';
 
 export const livequizzesContainerModule = new ContainerModule((options) => {
   // Services
@@ -28,6 +31,10 @@ export const livequizzesContainerModule = new ContainerModule((options) => {
   options.bind(LIVE_QUIZ_TYPES.AIContentService).to(AIContentService).inSingletonScope();
   options.bind(LIVE_QUIZ_TYPES.CleanupService).to(CleanupService).inSingletonScope();
   options.bind(LIVE_QUIZ_TYPES.RAGService).to(RAGService).inSingletonScope();
+
+  // RAGService dependencies — must be bound so inversify can resolve them
+  options.bind(GENAI_TYPES.DocumentParserService).to(DocumentParserService).inSingletonScope();
+  options.bind(GENAI_TYPES.EmbeddingService).to(EmbeddingService).inSingletonScope();
 
   // Controllers
   options.bind(PollRoomController).toSelf().inSingletonScope();
