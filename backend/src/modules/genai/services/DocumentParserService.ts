@@ -1,5 +1,5 @@
 import { injectable } from 'inversify';
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 import { HttpError } from 'routing-controllers';
 
@@ -21,8 +21,9 @@ export class DocumentParserService {
 
     try {
       if (isPdf) {
-        const data = await pdfParse(buffer);
-        return data.text;
+        const parser = new PDFParse({ data: new Uint8Array(buffer), verbosity: 0 });
+        const result = await parser.getText();
+        return result.text;
       } else {
         const result = await mammoth.extractRawText({ buffer });
         return result.value;
