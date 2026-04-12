@@ -22,6 +22,7 @@ export class DocumentParserService {
     try {
       if (isPdf) {
         const parser = new PDFParse({ data: new Uint8Array(buffer), verbosity: 0 });
+        await (parser as any).load();
         const result = await parser.getText();
         return result.text;
       } else {

@@ -516,7 +516,7 @@ export default function TeacherPollRoom() {
   const fetchRagDocuments = useCallback(async () => {
     if (!roomCode) return;
     try {
-      const res = await api.get(`/livequizzes/rooms/${roomCode}/documents`);
+      const res = await api.get(`/livequizzes/rag/${roomCode}/documents`);
       setRagDocuments(res.data.documents || []);
     } catch (e) {
       console.error(e);
@@ -541,7 +541,9 @@ export default function TeacherPollRoom() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      await api.post(`/livequizzes/rooms/${roomCode}/documents`, formData);
+      await api.post(`/livequizzes/rag/${roomCode}/documents`, formData, {
+        headers: { 'Content-Type': undefined }, // Let browser set multipart/form-data with boundary
+      });
       toast.success('Document uploaded and indexed successfully');
       fetchRagDocuments();
     } catch (err: any) {
@@ -554,7 +556,7 @@ export default function TeacherPollRoom() {
 
   const handleRagDelete = async (docId: string) => {
     try {
-      await api.delete(`/livequizzes/rooms/${roomCode}/documents/${docId}`);
+      await api.delete(`/livequizzes/rag/${roomCode}/documents/${docId}`);
       toast.success('Document deleted');
       fetchRagDocuments();
     } catch (err) {
@@ -570,7 +572,7 @@ export default function TeacherPollRoom() {
     setIsRagGenerating(true);
     try {
       const spec = questionSpec ? JSON.parse(questionSpec) : [{ SOL: questionCount }];
-      const res = await api.post(`/livequizzes/rooms/${roomCode}/rag-questions`, {
+      const res = await api.post(`/livequizzes/rag/${roomCode}/questions`, {
         topic: ragTopic.trim(),
         globalQuestionSpecification: spec,
         model: selectedModel

@@ -397,10 +397,10 @@ export class PollRoomController {
       const buffer = await fsp.readFile(tempPath);
       const result = await this.ragService.indexDocument(roomCode, buffer, mimetype, originalname);
       
-      return {
+      return res.json({
         message: 'Document indexed successfully',
         document: result
-      };
+      });
     } finally {
       // Clean up temp file
       await this.cleanupService.cleanup([tempPath]);

@@ -6,6 +6,7 @@ import { useContainer, RoutingControllersOptions } from 'routing-controllers';
 import { InversifyAdapter } from '#root/inversify-adapter.js';
 
 import { PollRoomController } from './controllers/PollRoomController.js';
+import { RAGController } from './controllers/RAGController.js';
 
 import { CreatePollValidator } from './validators/CreatePollValidator.js';
 import { CreateRoomValidator } from './validators/CreateRoomValidator.js';
@@ -18,6 +19,7 @@ export const livequizzesContainerModules: ContainerModule[] = [
 
 export const livequizzesModuleControllers: Function[] = [
   PollRoomController,
+  RAGController,
   DashboardController,
 ];
 

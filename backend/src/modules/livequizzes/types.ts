@@ -2,6 +2,7 @@ const TYPES = {
   // Controllers
   PollRoomController: Symbol.for('PollRoomController'),
   DashboardController: Symbol.for('DashboardController'),
+  RAGController: Symbol.for('RAGController'),
 
   // Services
   PollService: Symbol.for('PollService'),

@@ -1,6 +1,7 @@
 import { ContainerModule } from 'inversify';
 import { LIVE_QUIZ_TYPES } from './types.js';
 import { PollRoomController } from './controllers/PollRoomController.js';
+import { RAGController } from './controllers/RAGController.js';
 import { PollService } from './services/PollService.js';
 import { RoomService } from './services/RoomService.js';
 import { pollSocket } from './utils/PollSocket.js';
@@ -39,6 +40,7 @@ export const livequizzesContainerModule = new ContainerModule((options) => {
   // Controllers
   options.bind(PollRoomController).toSelf().inSingletonScope();
   options.bind(DashboardController).toSelf().inSingletonScope();
+  options.bind(RAGController).toSelf().inSingletonScope();
 
   // Socket
   options.bind(LIVE_QUIZ_TYPES.PollSocket).toConstantValue(pollSocket);
