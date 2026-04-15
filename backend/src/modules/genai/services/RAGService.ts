@@ -13,17 +13,17 @@ export class RAGService {
     @inject(GENAI_TYPES.DocumentParserService) private documentParserService: DocumentParserService,
     @inject(GENAI_TYPES.EmbeddingService) private embeddingService: EmbeddingService,
     @inject(GENAI_TYPES.AIContentService) private aiContentService: AIContentService
-  ) {}
+  ) { }
 
   /**
    * Process an uploaded document, embed its chunks, and save to MongoDB
    */
   public async indexDocument(roomCode: string, buffer: Buffer, mimeType: string, fileName: string) {
     console.log(`[RAGService] Indexing document ${fileName} for room ${roomCode}`);
-    
+
     // 1. Parse text
     const text = await this.documentParserService.parseDocument(buffer, mimeType, fileName);
-    
+
     // 2. Chunk text
     const chunks = this.documentParserService.chunkText(text);
     console.log(`[RAGService] Split document into ${chunks.length} chunks`);
@@ -33,23 +33,23 @@ export class RAGService {
 
     // 3. Embed chunks sequentially (since Ollama may run locally and shouldn't be overwhelmed)
     for (let i = 0; i < chunks.length; i++) {
-        try {
-            const chunkText = chunks[i];
-            const embedding = await this.embeddingService.embed(chunkText);
-            
-            chunkDocs.push({
-                roomCode,
-                documentId,
-                fileName,
-                chunkIndex: i,
-                text: chunkText,
-                embedding
-            });
-            console.log(`[RAGService] Embedded chunk ${i + 1}/${chunks.length}`);
-        } catch(e) {
-            console.error(`[RAGService] Failed to embed chunk ${i + 1}:`, e);
-            throw e;
-        }
+      try {
+        const chunkText = chunks[i];
+        const embedding = await this.embeddingService.embed(chunkText);
+
+        chunkDocs.push({
+          roomCode,
+          documentId,
+          fileName,
+          chunkIndex: i,
+          text: chunkText,
+          embedding
+        });
+        console.log(`[RAGService] Embedded chunk ${i + 1}/${chunks.length}`);
+      } catch (e) {
+        console.error(`[RAGService] Failed to embed chunk ${i + 1}:`, e);
+        throw e;
+      }
     }
 
     // 4. Save to MongoDB
@@ -70,7 +70,7 @@ export class RAGService {
    */
   public async retrieveContext(roomCode: string, topic: string, topK: number = 5): Promise<string> {
     console.log(`[RAGService] Retrieving context for topic: "${topic}" in room: ${roomCode}`);
-    
+
     // 1. Embed the search topic
     const queryVector = await this.embeddingService.embed(topic);
 
@@ -125,14 +125,14 @@ export class RAGService {
     }
 
     // 2. Inject instructions pointing the AI back to the context
-    const enhancedTranscript = 
+    const enhancedTranscript =
       `The following excerpts are context retrieved from uploaded documents for the topic: "${topic}". ` +
       `Generate questions based strictly on this provided information.\n\n${context}`;
 
     // 3. Re-use existing AI content builder
     // AIContentService expects `segments` mapping
     console.log(`[RAGService] Generating questions from retrieved context...`);
-    
+
     return await this.aiContentService.generateQuestions({
       segments: { "RAG-Context": enhancedTranscript },
       globalQuestionSpecification: spec,
@@ -146,12 +146,14 @@ export class RAGService {
   public async getRoomDocuments(roomCode: string) {
     const docs = await DocumentChunk.aggregate([
       { $match: { roomCode } },
-      { $group: { 
-          _id: "$documentId", 
+      {
+        $group: {
+          _id: "$documentId",
           fileName: { $first: "$fileName" },
           chunkCount: { $sum: 1 },
           createdAt: { $first: "$createdAt" }
-      }},
+        }
+      },
       { $sort: { createdAt: -1 } }
     ]);
 
