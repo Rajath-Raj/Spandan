@@ -66,48 +66,91 @@ export class RAGService {
   }
 
   /**
-   * Retrieve the most relevant chunks for a given topic using Vector Search
+   * Cosine similarity between two vectors
+   */
+  private cosineSimilarity(a: number[], b: number[]): number {
+    let dot = 0, normA = 0, normB = 0;
+    for (let i = 0; i < a.length; i++) {
+      dot += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-10);
+  }
+
+  /**
+   * Retrieve the most relevant chunks for a given topic.
+   * First tries MongoDB Atlas $vectorSearch; falls back to in-memory cosine
+   * similarity if the index is missing or returns no results.
    */
   public async retrieveContext(roomCode: string, topic: string, topK: number = 5): Promise<string> {
     console.log(`[RAGService] Retrieving context for topic: "${topic}" in room: ${roomCode}`);
 
-    // 1. Embed the search topic
-    const queryVector = await this.embeddingService.embed(topic);
+    // 0. Diagnostic: Check if any chunks exist for this room at all
+    const totalChunksInRoom = await DocumentChunk.countDocuments({ roomCode });
+    console.log(`[RAGService] Total chunks available for room ${roomCode}: ${totalChunksInRoom}`);
 
-    // 2. Vector search in MongoDB Atlas
-    const results = await DocumentChunk.aggregate([
-      {
-        $vectorSearch: {
-          index: "vector_index",
-          path: "embedding",
-          queryVector: queryVector,
-          numCandidates: 100,
-          limit: topK,
-          filter: {
-            "roomCode": roomCode
-          }
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          text: 1,
-          fileName: 1,
-          score: { $meta: "vectorSearchScore" }
-        }
-      }
-    ]);
-
-    if (results.length === 0) {
-      console.warn(`[RAGService] No relevant chunks found for topic: "${topic}"`);
+    if (totalChunksInRoom === 0) {
+      console.warn(`[RAGService] No documents found in database for room: ${roomCode}`);
       return "";
     }
 
-    console.log(`[RAGService] Found ${results.length} relevant chunks`);
+    // 1. Embed the search topic
+    const queryVector = await this.embeddingService.embed(topic);
+    console.log(`[RAGService] Generated query vector of length: ${queryVector.length}`);
 
-    // 3. Combine retrieved chunks into a single context string
+    // 2. Try Atlas $vectorSearch first
+    let results: { text: string; fileName: string; score: number }[] = [];
+    try {
+      results = await DocumentChunk.aggregate([
+        {
+          $vectorSearch: {
+            index: "vector_index",
+            path: "embedding",
+            queryVector: queryVector,
+            numCandidates: 100,
+            limit: topK,
+            filter: { roomCode }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            text: 1,
+            fileName: 1,
+            score: { $meta: "vectorSearchScore" }
+          }
+        }
+      ]);
+      console.log(`[RAGService] Atlas $vectorSearch returned ${results.length} results`);
+    } catch (error: any) {
+      console.warn(`[RAGService] Atlas $vectorSearch failed (${error.message}), falling back to in-memory cosine similarity`);
+      results = [];
+    }
+
+    // 3. Fallback: in-memory cosine similarity if Atlas search returned nothing
+    if (results.length === 0) {
+      console.log(`[RAGService] Using in-memory cosine similarity fallback for room ${roomCode}`);
+      const allChunks = await DocumentChunk.find({ roomCode }, { text: 1, fileName: 1, embedding: 1 }).lean();
+
+      const scored = allChunks.map(chunk => ({
+        text: chunk.text,
+        fileName: chunk.fileName,
+        score: this.cosineSimilarity(queryVector, chunk.embedding as number[])
+      }));
+
+      scored.sort((a, b) => b.score - a.score);
+      results = scored.slice(0, topK);
+      console.log(`[RAGService] In-memory fallback found ${results.length} chunks, top score: ${results[0]?.score?.toFixed(4)}`);
+    }
+
+    if (results.length === 0) {
+      return "";
+    }
+
+    // 4. Combine retrieved chunks into a single context string
     const contextLines = results.map(
-      (r, index) => `--- Excerpt ${index + 1} from ${r.fileName} ---\n${r.text}\n`
+      (r, index) => `--- Excerpt ${index + 1} from ${r.fileName} (Score: ${r.score?.toFixed(4)}) ---\n${r.text}\n`
     );
 
     return contextLines.join('\n');
@@ -121,7 +164,12 @@ export class RAGService {
     const context = await this.retrieveContext(roomCode, topic, 5);
 
     if (!context.trim()) {
-      throw new HttpError(400, "Could not find any relevant information for this topic in the uploaded documents.");
+      // Check if any documents exist to give a better error message
+      const hasDocs = await DocumentChunk.exists({ roomCode });
+      if (!hasDocs) {
+        throw new HttpError(400, "No documents have been uploaded for this room. Please upload a document first.");
+      }
+      throw new HttpError(400, `Could not find any relevant information for the topic "${topic}" in the uploaded documents. Try a different topic or verify your documents contain this information.`);
     }
 
     // 2. Inject instructions pointing the AI back to the context

@@ -21,8 +21,9 @@ export class DocumentParserService {
 
     try {
       if (isPdf) {
+        // Correct usage for mehmet-kozan/pdf-parse: pass a LoadParameters object
         const parser = new PDFParse({ data: new Uint8Array(buffer), verbosity: 0 });
-        await (parser as any).load();
+        // parser.getText() handles loading internally. .load() is private.
         const result = await parser.getText();
         return result.text;
       } else {

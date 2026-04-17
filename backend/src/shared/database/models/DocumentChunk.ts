@@ -16,6 +16,7 @@ DocumentChunkSchema.index({ roomCode: 1, documentId: 1 });
 
 /**
  * IMPORTANT: MongoDB Atlas Vector Search index must be created manually in Atlas UI / CLI.
+pr * Collection: "documentchunks" (Mongoose pluralizes DocumentChunk)
  * Index name: "vector_index"
  * The index definition MUST include roomCode as a filter field, otherwise the
  * $vectorSearch filter in RAGService.retrieveContext() is silently ignored and

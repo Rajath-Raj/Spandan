@@ -14,11 +14,12 @@ async function run() {
     const results = await col.aggregate([
       {
         $vectorSearch: {
-          index: 'vector_index',
+          index: 'non_existent_index',
           path: 'embedding',
           queryVector: queryVector,
           numCandidates: 100,
-          limit: 5
+          limit: 5,
+          filter: { roomCode: 'L8YZ77' }
         }
       }
     ]).toArray();

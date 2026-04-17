@@ -397,7 +397,7 @@ export default function TeacherPollRoom() {
   const [showPreview, setShowPreview] = useState(false);
   const [_editingQuestionIndex, setEditingQuestionIndex] = useState<number | null>(null);
   const [questionSpec, setQuestionSpec] = useState("");
-  const [selectedModel, setSelectedModel] = useState("deepseek-r1:70b");
+  const [selectedModel, setSelectedModel] = useState("gemma3");
   const [questionCount, setQuestionCount] = useState<number>(3);
 
   // RAG State
@@ -1843,10 +1843,8 @@ export default function TeacherPollRoom() {
     const [isOpen, setIsOpen] = useState(false);
 
     const models = [
-      { value: "gemma3", label: "Gemma 3" },
-      { value: "gpt-4", label: "GPT-4" },
-      { value: "claude-3", label: "Claude 3" },
-      { value: "deepseek-r1:70b", label: "DeepSeek R1 (70B)" }
+      { value: "gemma3", label: "Gemma 3 (Local)" },
+      { value: "deepseek-r1:70b", label: "DeepSeek R1 70B (Local)" }
     ];
 
     const selectedModelLabel = models.find(model => model.value === selectedModel)?.label || "Select Model";
