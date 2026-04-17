@@ -406,6 +406,7 @@ export default function TeacherPollRoom() {
   const [ragTopic, setRagTopic] = useState("");
   const [isRagUploading, setIsRagUploading] = useState(false);
   const [isRagGenerating, setIsRagGenerating] = useState(false);
+  const [ragPastedText, setRagPastedText] = useState("");
 
   // Queue for auto-generated questions while live recording is ongoing.
   // These are hidden from the UI until the teacher stops the mic.
@@ -551,6 +552,30 @@ export default function TeacherPollRoom() {
     } finally {
       setIsRagUploading(false);
       e.target.value = '';
+    }
+  };
+
+  const handleRagPastedTextSubmit = async () => {
+    if (!ragPastedText.trim()) {
+      toast.error('Please paste some text first.');
+      return;
+    }
+    
+    setIsRagUploading(true);
+    try {
+      const file = new File([ragPastedText], `Transcript_${new Date().toISOString().slice(0, 10)}.txt`, { type: 'text/plain' });
+      const formData = new FormData();
+      formData.append('file', file);
+      await api.post(`/livequizzes/rag/${roomCode}/documents`, formData, {
+        headers: { 'Content-Type': undefined },
+      });
+      toast.success('Pasted transcript uploaded and indexed successfully');
+      setRagPastedText(''); // Clear text after successful upload
+      fetchRagDocuments();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to upload pasted transcript');
+    } finally {
+      setIsRagUploading(false);
     }
   };
 
@@ -4319,10 +4344,32 @@ export default function TeacherPollRoom() {
                       
                       <CardContent className="flex-1 overflow-y-auto space-y-6">
                         <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Upload Reference Documents (PDF/DOCX)</label>
+                          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Upload Reference Documents (PDF/DOCX/TXT) or Paste Transcript</label>
                           <div className="flex gap-2">
-                            <Input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={handleRagUpload} disabled={isRagUploading} />
+                            <Input type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" onChange={handleRagUpload} disabled={isRagUploading} />
                             {isRagUploading && <Button disabled variant="outline"><Loader2 size={16} className="animate-spin mr-2" /> Uploading</Button>}
+                          </div>
+                          
+                          <div className="pt-2">
+                            <textarea 
+                              className="w-full text-sm border rounded-md p-2 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+                              rows={4}
+                              placeholder="Or paste your raw transcript text here..."
+                              value={ragPastedText}
+                              onChange={(e) => setRagPastedText(e.target.value)}
+                              disabled={isRagUploading}
+                            />
+                            <div className="flex justify-end mt-2">
+                              <Button
+                                size="sm"
+                                onClick={handleRagPastedTextSubmit}
+                                disabled={!ragPastedText.trim() || isRagUploading}
+                                variant="outline"
+                                className="border-purple-500 text-purple-600 hover:bg-purple-50 hover:text-purple-700 dark:border-purple-400 dark:text-purple-300 dark:hover:bg-purple-900/30"
+                              >
+                                {isRagUploading ? <><Loader2 size={14} className="animate-spin mr-2" /> Uploading</> : <><Upload size={14} className="mr-2" /> Upload Pasted Transcript</>}
+                              </Button>
+                            </div>
                           </div>
                         </div>
 

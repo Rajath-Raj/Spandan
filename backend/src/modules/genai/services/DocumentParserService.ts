@@ -13,9 +13,10 @@ export class DocumentParserService {
     const isDocx =
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       originalName.toLowerCase().endsWith('.docx');
+    const isTxt = mimeType === 'text/plain' || originalName.toLowerCase().endsWith('.txt');
 
     // Guard unsupported types BEFORE the try/catch so the 400 isn't swallowed as 500
-    if (!isPdf && !isDocx) {
+    if (!isPdf && !isDocx && !isTxt) {
       throw new HttpError(400, `Unsupported file type: ${mimeType || originalName}`);
     }
 
@@ -26,9 +27,12 @@ export class DocumentParserService {
         // parser.getText() handles loading internally. .load() is private.
         const result = await parser.getText();
         return result.text;
-      } else {
+      } else if (isDocx) {
         const result = await mammoth.extractRawText({ buffer });
         return result.value;
+      } else {
+        // isTxt
+        return buffer.toString('utf-8');
       }
     } catch (error: any) {
       console.error(`[DocumentParserService] Error parsing document ${originalName}:`, error);
