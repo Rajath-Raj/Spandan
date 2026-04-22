@@ -1029,66 +1029,40 @@ export default function TeacherPollRoom() {
         console.error("Error releasing recording lock:", error);
       }
 
-      // When recording stops, flush any remaining text (<100 words) into queue and
-      // wait for queued processing to finish, then reveal the generated questions.
+      // 📚 RAG ONLY: Upload the full transcript to the RAG knowledge base.
+      // The teacher then opens the RAG panel, picks a topic, and generates
+      // questions themselves — no automatic question generation.
       setIsProcessing(true);
       try {
-        // Determine current buffer based on mode
         const textBuffer = (useWhisper || useWhisperGGML)
           ? (transcriber.accumulatedChunks ?? []).map((c) => c.text).join(" ").trim()
           : displayTranscript.trim();
 
         bufferTextRef.current = textBuffer;
 
-        const words = textBuffer ? textBuffer.split(/\s+/).filter(Boolean) : [];
-        const remaining = words.length - processedWordsRef.current;
-        if (remaining > 0) {
-          const remainderText = words.slice(processedWordsRef.current, processedWordsRef.current + remaining).join(" ");
-          processedWordsRef.current += remaining;
-          enqueueTextChunk(remainderText);
-        }
-
-        // Wait for queue to finish processing
-        while (processingQueueRef.current || pendingTextChunksRef.current.length > 0) {
-          // small sleep
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise((r) => setTimeout(r, 200));
-        }
-
-        // Move queued generated questions into visible generatedQuestions list
-        if (queuedGeneratedQuestionsRef.current.length > 0) {
-          const queued = queuedGeneratedQuestionsRef.current;
-          const prevLen = generatedQuestions.length;
-          setGeneratedQuestions((prev) => [...prev, ...queued]);
-          setShowPreview(true);
-          // open the single-question viewer starting at the first newly added question
-          setShowQueuedViewer(true);
-          setQueuedViewerIndex(prevLen);
-          // clear queued refs/state
-          queuedGeneratedQuestionsRef.current = [];
-          setQueuedGeneratedQuestions([]);
-          toast.success("Generated questions are ready");
-        }
-
-        // 🆕 AUTO-INDEX: Upload full transcript to RAG knowledge base (fire-and-forget)
         if (textBuffer.trim().length > 10) {
           const ragFileName = `Live_Class_${new Date().toLocaleTimeString('en-IN').replace(/[:/\s]/g, '-')}.txt`;
           const ragFile = new File([textBuffer.trim()], ragFileName, { type: 'text/plain' });
           const ragFormData = new FormData();
           ragFormData.append('file', ragFile);
-          api.post(`/livequizzes/rag/${roomCode}/documents`, ragFormData, {
-            headers: { 'Content-Type': undefined }, // Let browser set multipart/form-data boundary
-          })
-            .then(() => {
-              toast.success('📚 Transcript indexed into RAG knowledge base');
-              if (showRagPanel) fetchRagDocuments();
-            })
-            .catch((ragErr) => {
-              console.error('[RAG Auto-Index] Failed to index transcript:', ragErr);
+
+          try {
+            await api.post(`/livequizzes/rag/${roomCode}/documents`, ragFormData, {
+              headers: { 'Content-Type': undefined },
             });
+            toast.success('📚 Transcript saved! Open the RAG panel to generate questions.');
+            // Auto-open the RAG panel and refresh the document list
+            setShowRagPanel(true);
+            fetchRagDocuments();
+          } catch (ragErr) {
+            console.error('[RAG Auto-Index] Failed to index transcript:', ragErr);
+            toast.error('Failed to save transcript to RAG knowledge base.');
+          }
+        } else {
+          toast.info('Recording stopped — transcript was too short to save.');
         }
       } catch (err) {
-        // Error finalizing queued question generation
+        console.error('[RAG Auto-Index] Unexpected error:', err);
       } finally {
         setIsProcessing(false);
       }
@@ -1184,41 +1158,34 @@ export default function TeacherPollRoom() {
     recordingLockStatus,
   ]);
 
-  // NEW: Time-based automatic question generation trigger
+  // ⏸️ Time-based auto question generation is DISABLED.
+  // Transcript is now sent to the RAG knowledge base on mic stop.
+  // The teacher controls question generation manually via the RAG panel.
+  // (kept as comment for reference — remove if no longer needed)
+  /*
   useEffect(() => {
     if (!isRecording && !isLiveRecordingActive) {
-      // Keep it updated so that when recording starts, it's fresh
       lastGenerationTimeRef.current = Date.now();
       return;
     }
-
     const intervalId = setInterval(() => {
       const now = Date.now();
       const elapsedSeconds = (now - lastGenerationTimeRef.current) / 1000;
-
       if (elapsedSeconds >= autoGenInterval) {
-        // Build the current transcript buffer based on active mode
-        // Use the Ref-synced text to avoid state-closure issues and keep effect stable
         const textBuffer = bufferTextRef.current;
-
-        // Check if there are internal words to process
         const words = textBuffer ? textBuffer.split(/\s+/).filter(Boolean) : [];
         const remainingCount = words.length - processedWordsRef.current;
-
         if (remainingCount > 0) {
           const chunkWords = words.slice(processedWordsRef.current, processedWordsRef.current + remainingCount).join(" ");
           processedWordsRef.current += remainingCount;
           enqueueTextChunk(chunkWords);
         }
-
-        // Always reset time to the current "tick" regardless of word availability
-        // to ensure we keep trying if the user starts talking again.
         lastGenerationTimeRef.current = now;
       }
-    }, 1000); // Check every second
-
+    }, 1000);
     return () => clearInterval(intervalId);
   }, [isRecording, isLiveRecordingActive, autoGenInterval, enqueueTextChunk]);
+  */
 
   useEffect(() => {
     if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
