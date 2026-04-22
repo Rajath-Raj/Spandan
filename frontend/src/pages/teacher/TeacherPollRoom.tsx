@@ -855,13 +855,17 @@ export default function TeacherPollRoom() {
       const chunk = pendingTextChunksRef.current.shift();
       if (!chunk) continue;
       try {
-        const formData = new FormData();
-        formData.append('transcript', chunk);
-        if (questionSpec) formData.append('questionSpec', questionSpec);
-        formData.append('model', selectedModel);
-        formData.append('questionCount', questionCount.toString());
+        // Send as JSON — backend now accepts application/json for this endpoint
+        const payload: Record<string, unknown> = {
+          transcript: chunk,
+          model: selectedModel,
+          questionCount,
+        };
+        if (questionSpec) {
+          try { payload.questionSpec = JSON.parse(questionSpec); } catch { payload.questionSpec = questionSpec; }
+        }
 
-        const response = await api.post(`/livequizzes/rooms/${roomCode}/generate-questions`, formData);
+        const response = await api.post(`/livequizzes/rooms/${roomCode}/generate-questions`, payload);
 
         const rawQuestions = response.data.questions || [];
 
@@ -1064,6 +1068,24 @@ export default function TeacherPollRoom() {
           queuedGeneratedQuestionsRef.current = [];
           setQueuedGeneratedQuestions([]);
           toast.success("Generated questions are ready");
+        }
+
+        // 🆕 AUTO-INDEX: Upload full transcript to RAG knowledge base (fire-and-forget)
+        if (textBuffer.trim().length > 10) {
+          const ragFileName = `Live_Class_${new Date().toLocaleTimeString('en-IN').replace(/[:/\s]/g, '-')}.txt`;
+          const ragFile = new File([textBuffer.trim()], ragFileName, { type: 'text/plain' });
+          const ragFormData = new FormData();
+          ragFormData.append('file', ragFile);
+          api.post(`/livequizzes/rag/${roomCode}/documents`, ragFormData, {
+            headers: { 'Content-Type': undefined }, // Let browser set multipart/form-data boundary
+          })
+            .then(() => {
+              toast.success('📚 Transcript indexed into RAG knowledge base');
+              if (showRagPanel) fetchRagDocuments();
+            })
+            .catch((ragErr) => {
+              console.error('[RAG Auto-Index] Failed to index transcript:', ragErr);
+            });
         }
       } catch (err) {
         // Error finalizing queued question generation

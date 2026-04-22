@@ -210,74 +210,62 @@ export class PollRoomController {
     }
   }
 
-  // 🔹 AI Question Generation from transcript or YouTube
+  // 🔹 AI Question Generation from transcript (accepts JSON body — no file upload)
   //@Authorized(['teacher'])
   @Post('/:code/generate-questions')
   @HttpCode(200)
   async generateQuestionsFromTranscript(
-    @Req() req: Request,
-    @Res() res: Response
+    @Param('code') code: string,
+    @Body() body: { transcript: string; questionSpec?: any; model?: string; questionCount?: number }
   ) {
-    const tempPaths: string[] = [];
+    // @Body() is resolved AFTER body-parser runs — guaranteed to have the parsed JSON
+    const { transcript, questionSpec, model, questionCount } = body;
 
-    await new Promise<void>((resolve, reject) => {
-      upload.single('file')(req, res, (err) => (err ? reject(err) : resolve()));
+    if (!transcript || typeof transcript !== 'string') {
+      throw new BadRequestError('transcript is required and must be a string.');
+    }
+
+    const SEGMENTATION_THRESHOLD = parseInt(process.env.TRANSCRIPT_SEGMENTATION_THRESHOLD || '6000', 10);
+    const defaultModel = 'gemma3';
+    const selectedModel = model?.trim() || defaultModel;
+
+    // Parse questionCount with default value (JSON sends it as a number already)
+    const numQuestions = questionCount ? Number(questionCount) : 2;
+
+    let segments: Record<string, string>;
+    if (transcript.length <= SEGMENTATION_THRESHOLD) {
+      console.log('[generateQuestions] Small transcript — using full text.');
+      segments = { full: transcript };
+    } else {
+      console.log('[generateQuestions] Long transcript — running segmentation...');
+      segments = await this.aiContentService.segmentTranscript(transcript, selectedModel);
+    }
+
+    // Safe default questionSpec
+    let safeSpec: QuestionSpec[] = [{ SOL: numQuestions }];
+    if (questionSpec && typeof questionSpec === 'object' && !Array.isArray(questionSpec)) {
+      safeSpec = [questionSpec];
+    } else if (Array.isArray(questionSpec) && typeof questionSpec[0] === 'object') {
+      safeSpec = questionSpec;
+    } else {
+      console.warn(`Invalid questionSpec — using default [{ SOL: ${numQuestions} }]`);
+    }
+    console.log('[generateQuestions] spec:', safeSpec, '| length:', transcript.length, '| model:', selectedModel);
+
+    const generatedQuestions = await this.aiContentService.generateQuestions({
+      segments,
+      globalQuestionSpecification: safeSpec,
+      model: selectedModel,
     });
 
-    try {
-      const { transcript, questionSpec, model, questionCount } = req.body;
-
-      const SEGMENTATION_THRESHOLD = parseInt(process.env.TRANSCRIPT_SEGMENTATION_THRESHOLD || '6000', 10);
-      const defaultModel = 'gemma3';
-      const selectedModel = model?.trim() || defaultModel;
-
-      // Parse questionCount with default value
-      const numQuestions = questionCount ? parseInt(questionCount, 10) : 2;
-
-      let segments: Record<string, string>;
-      if (transcript.length <= SEGMENTATION_THRESHOLD) {
-        console.log('[generateQuestions] Small transcript detected. Using full transcript without segmentation.');
-        console.log('Transcript:', transcript);
-        segments = { full: transcript };
-      } else {
-        console.log('[generateQuestions] Transcript is long; running segmentation...');
-        segments = await this.aiContentService.segmentTranscript(transcript, selectedModel);
-      }
-
-      // ✅ Safe default questionSpec with custom count
-      let safeSpec: QuestionSpec[] = [{ SOL: numQuestions }];
-      if (questionSpec && typeof questionSpec === 'object' && !Array.isArray(questionSpec)) {
-        safeSpec = [questionSpec];
-      } else if (Array.isArray(questionSpec) && typeof questionSpec[0] === 'object') {
-        safeSpec = questionSpec;
-      } else {
-        console.warn(`Invalid questionSpec provided; using default [{ SOL: ${numQuestions} }]`);
-      }
-      console.log('Using questionSpec:', safeSpec);
-      console.log('[generateQuestions] Transcript length:', transcript.length);
-      console.log('[generateQuestions] Transcript preview:', segments);
-
-      console.log('[generateQuestions] Number of questions to generate:', numQuestions);
-      const generatedQuestions = await this.aiContentService.generateQuestions({
-        segments,
-        globalQuestionSpecification: safeSpec,
-        model: selectedModel,
-      });
-
-      return res.json({
-        message: 'Questions generated successfully from transcript.',
-        transcriptPreview: transcript.substring(0, 200) + '...',
-        segmentsCount: Object.keys(segments).length,
-        totalQuestions: generatedQuestions.length,
-        requestedQuestions: numQuestions,
-        questions: generatedQuestions,
-      });
-    } catch (err: any) {
-      console.error('Error generating questions:', err);
-      return res.status(err.status || 500).json({ message: err.message || 'Internal Server Error' });
-    } finally {
-      await this.cleanupService.cleanup(tempPaths);
-    }
+    return {
+      message: 'Questions generated successfully from transcript.',
+      transcriptPreview: transcript.substring(0, 200) + '...',
+      segmentsCount: Object.keys(segments).length,
+      totalQuestions: generatedQuestions.length,
+      requestedQuestions: numQuestions,
+      questions: generatedQuestions,
+    };
   }
 
   // Recording lock endpoints
