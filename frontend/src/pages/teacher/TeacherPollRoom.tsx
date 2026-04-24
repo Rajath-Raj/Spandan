@@ -1280,30 +1280,44 @@ export default function TeacherPollRoom() {
   const processAudioBlob = async () => {
     if (!audioBlob) return;
 
-    setIsProcessing(true);
-
-    /* const fileReader = new FileReader();
- 
-     fileReader.onloadend = async () => {
-       const arrayBuffer = fileReader.result as ArrayBuffer;
-       if (!arrayBuffer) return;
- 
-       const audioCTX = new AudioContext({
-         sampleRate: 16000, // Whisper default sample rate
-       });
- 
-       const decoded = await audioCTX.decodeAudioData(arrayBuffer);
-       transcriber.onInputChange();
-       transcriber.start(decoded);*/
-
+    // Close the modal first
     setIsRecording(false);
     setIsListening(false);
     setShowRecordModal(false);
-    setShowExternalModal(false)
-    setShowGGMLRecordModel(false)
-    // };
+    setShowExternalModal(false);
+    setShowGGMLRecordModel(false);
+    setIsLiveRecordingActive(false);
 
-    // fileReader.readAsArrayBuffer(audioBlob);
+    // 📚 RAG ONLY: Upload Whisper transcript to RAG knowledge base.
+    // Use accumulatedChunks if available (live Whisper), otherwise fall back to whisperAiText.
+    const textBuffer = (
+      (transcriber.accumulatedChunks ?? []).map((c) => c.text).join(' ').trim()
+      || whisperAiText.trim()
+    );
+
+    if (textBuffer.length > 10) {
+      setIsProcessing(true);
+      try {
+        const ragFileName = `Live_Class_${new Date().toLocaleTimeString('en-IN').replace(/[:/\s]/g, '-')}.txt`;
+        const ragFile = new File([textBuffer], ragFileName, { type: 'text/plain' });
+        const ragFormData = new FormData();
+        ragFormData.append('file', ragFile);
+
+        await api.post(`/livequizzes/rag/${roomCode}/documents`, ragFormData, {
+          headers: { 'Content-Type': undefined },
+        });
+        toast.success('📚 Transcript saved! Open the RAG panel to generate questions.');
+        setShowRagPanel(true);
+        fetchRagDocuments();
+      } catch (ragErr) {
+        console.error('[RAG Whisper] Failed to index transcript:', ragErr);
+        toast.error('Failed to save Whisper transcript to RAG.');
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      toast.info('Transcript was too short to save.');
+    }
   };
 
   // Handle live audio streaming for Whisper
@@ -1756,33 +1770,21 @@ export default function TeacherPollRoom() {
     const text = transcriber.output?.text;
     const isComplete = !transcriber.output?.isBusy;
 
-    // 1️⃣ Final transcription completed
-    if (text && isComplete && !isLiveRecordingActive && !hasGeneratedQuestions) {
-      setTranscript(text);
-      toast.success("Transcribed successfully");
-      setIsProcessing(true);
-
-      // Capture the final text in a local variable
-      const finalText = text;
-
-      setTimeout(() => {
-        generateQuestions(whisperAiText);
-      }, 5000); // 5 seconds delay
-
-      setHasGeneratedQuestions(true); // prevent multiple calls
-      setWhisperAiText(finalText); // set final text
-    }
-
-    // 2️⃣ Live transcription updates
+    // 1️⃣ Live transcription updates — append partial Whisper output while recording
     if (isLiveRecordingActive && text) {
       setWhisperAiText(prev => prev + text); // append partial text
       setHasGeneratedQuestions(false); // allow next final transcription
     }
 
-    // 3️⃣ Optional: reset whisperAiText when transcription marked complete
-    if (isTranscriptionComplete) {
-      //console.log("Transcription done ===", text);
-      // setWhisperAiText(text || '');
+    // 2️⃣ Final transcription completed — just show a toast.
+    // Question generation is now teacher-controlled via the RAG panel.
+    // (processAudioBlob handles the RAG upload when Load is clicked)
+    if (text && isComplete && !isLiveRecordingActive && !hasGeneratedQuestions) {
+      setTranscript(text);
+      const finalText = text;
+      setHasGeneratedQuestions(true);
+      setWhisperAiText(finalText);
+      // ℹ️ Do NOT call generateQuestions here — the teacher controls this via RAG panel.
     }
   }, [transcriber.output, isLiveRecordingActive, hasGeneratedQuestions, isTranscriptionComplete]);
 
@@ -4459,10 +4461,7 @@ export default function TeacherPollRoom() {
                 onSubmit={() => {
                   processAudioBlob();
                   setAudioBlob(undefined);
-                  setIsLiveRecordingActive(false);
-                  setShouldProcessTranscript(true);
                   setIsTranscriptionComplete(false);
-
                 }}
               />
               <Modal
